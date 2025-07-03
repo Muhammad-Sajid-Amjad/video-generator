@@ -9,7 +9,7 @@ import logging
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-video_path = "template.mp4"
+video_path = os.path.join("assets", "template.mp4")
 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Fallback safe font
 font_size = 90
 font_color = "black"
