@@ -10,7 +10,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 video_path = os.path.join("assets", "template.mp4")
-font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Fallback safe font
+font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Fallback font
 font_size = 90
 font_color = "black"
 bg_color = "white"
@@ -64,8 +64,14 @@ def generate_videos():
         os.makedirs("videos", exist_ok=True)
 
         for i, hook in enumerate(hooks, 1):
-            app.logger.info(f"Generating video {i}")
+            app.logger.info(f"🎬 Generating video {i}")
+            if not os.path.exists(video_path):
+                app.logger.error(f"❌ template.mp4 not found at: {video_path}")
+                return jsonify({"error": f"template.mp4 not found at {video_path}"}), 500
+
             video = VideoFileClip(video_path)
+            app.logger.info("✅ Loaded template video")
+
             video_width = video.w
             y_offset = int(video.h * 0.15)
 
@@ -75,7 +81,10 @@ def generate_videos():
 
             filename = f"output_{uuid.uuid4().hex[:8]}.mp4"
             filepath = os.path.join("videos", filename)
-            final.write_videofile(filepath, codec="libx264", audio_codec="aac", logger=None)
+
+            app.logger.info(f"💾 Saving to: {filepath}")
+            final.write_videofile(filepath, codec="libx264", audio_codec="aac")  # <-- Enable logging
+            app.logger.info(f"✅ Saved video {i} successfully")
 
             saved_files.append(f"https://{request.host}/download/{filename}")
 
@@ -92,6 +101,5 @@ def download(filename):
         return send_file(filepath, as_attachment=True)
     return jsonify({"error": "File not found"}), 404
 
-# Don't specify port manually; Render handles it
 if __name__ == "__main__":
     app.run(host="0.0.0.0")
