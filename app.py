@@ -4,11 +4,13 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import os
 import uuid
+import logging
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 
 video_path = "template.mp4"
-font_path = "/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf"
+font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Fallback safe font
 font_size = 90
 font_color = "black"
 bg_color = "white"
@@ -50,30 +52,38 @@ def create_text_image(text, width):
 
 @app.route('/generate', methods=['POST'])
 def generate_videos():
-    data = request.get_json()
-    hook_texts = data.get("hooks", "")
-    hooks = [h.strip() for h in hook_texts.strip().split("\n\n") if h.strip()]
+    try:
+        data = request.get_json(force=True)
+        hook_texts = data.get("hooks", "")
+        if not hook_texts.strip():
+            return jsonify({"error": "No hooks provided"}), 400
 
-    saved_files = []
+        hooks = [h.strip() for h in hook_texts.strip().split("\n\n") if h.strip()]
+        saved_files = []
 
-    for i, hook in enumerate(hooks, 1):
-        print(f"Generating video {i}")
-        video = VideoFileClip(video_path)
-        video_width = video.w
-        y_offset = int(video.h * 0.15)
-
-        img_np = create_text_image(hook, video_width)
-        txt_clip = ImageClip(img_np).set_duration(video.duration).set_position(("center", y_offset))
-        final = CompositeVideoClip([video, txt_clip])
-
-        filename = f"output_{uuid.uuid4().hex[:8]}.mp4"
-        filepath = os.path.join("videos", filename)
         os.makedirs("videos", exist_ok=True)
-        final.write_videofile(filepath, codec="libx264", audio_codec="aac", logger=None)
 
-        saved_files.append(filepath)
+        for i, hook in enumerate(hooks, 1):
+            app.logger.info(f"Generating video {i}")
+            video = VideoFileClip(video_path)
+            video_width = video.w
+            y_offset = int(video.h * 0.15)
 
-    return jsonify({"status": "success", "files": saved_files})
+            img_np = create_text_image(hook, video_width)
+            txt_clip = ImageClip(img_np).set_duration(video.duration).set_position(("center", y_offset))
+            final = CompositeVideoClip([video, txt_clip])
+
+            filename = f"output_{uuid.uuid4().hex[:8]}.mp4"
+            filepath = os.path.join("videos", filename)
+            final.write_videofile(filepath, codec="libx264", audio_codec="aac", logger=None)
+
+            saved_files.append(f"https://{request.host}/download/{filename}")
+
+        return jsonify({"status": "success", "files": saved_files})
+
+    except Exception as e:
+        app.logger.error("🔥 Error generating video", exc_info=True)
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/download/<filename>', methods=['GET'])
 def download(filename):
@@ -82,5 +92,6 @@ def download(filename):
         return send_file(filepath, as_attachment=True)
     return jsonify({"error": "File not found"}), 404
 
+# Don't specify port manually; Render handles it
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0")
